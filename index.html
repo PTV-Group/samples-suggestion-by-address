@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/maplibre-gl@2.1.7/dist/maplibre-gl.css" />
+    <link rel="stylesheet" type="text/css" href="style.css" />
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+</head>
+
+<body>
+    <div id="wrapper">
+        <div id="leftPane">
+            <div id="address">
+
+                <div class="addressInput">
+                    <label>Country</label>
+                    <input id="countryInput" type="text" value="Germany">
+                </div>
+                <div class="addressInput">
+                    <label>State</label>
+                    <input id="stateInput" type="text" value="Baden-Württemberg">
+                </div>
+                <div class="addressInput">
+                    <label>Postal Code</label>
+                    <input id="postalCodeInput" type="text" value="76131">
+                </div>
+                <div class="addressInput">
+                    <label>Locality</label>
+                    <input id="localityInput" type="text" value="Karlsruhe">
+                </div>
+                <div class="addressInput">
+                    <label>Street</label>
+                    <input id="streetInput" type="text" value="Haid und Neu">
+                </div>
+                <div class="addressInput">
+                    <label>House Number</label>
+                    <input id="houseNumberInput" type="text" value="1">
+                </div>
+            </div>
+
+            <div id="buttons">
+                <div class="addressInput">
+                    <button class="addressInput" id="clearButton" onclick="clearInputs()">Clear</button>
+                    <button class="addressInput" id="presetButton" onclick="presetInputs()">Preset</button>
+                    <button class="addressInput" id="searchButton" onclick="searchAddress()">Search Address</button>
+                </div>
+            </div>
+
+            <div id="space">
+            </div>
+
+            <div id="config">
+              <div class="configInput">
+                <label>ApiKey</label>
+                <input id="apiKey" type="text" placeholder="ENTER YOUR API KEY AND PRESS RETURN" />
+              </div>
+
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+    <script type="text/javascript" src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/maplibre-gl@2.1.7/dist/maplibre-gl.js"></script>
+    <script type="text/javascript"
+        src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.15/leaflet-maplibre-gl.js"></script>
+    <script type="text/javascript" src="constants.js"></script>
+    <script type="text/javascript">
+        let map;
+        let markers;
+        let currApiKey;
+        let currentGeocodingUrl = defaultGeocodingUrl;
+        let currentMapStyleUrl = defaultMapStyle;
+
+        window.onload = function () {
+          initializeApiKey()
+          useSelection();
+
+          maplibregl.setRTLTextPlugin(
+            'https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-rtl-text/v0.2.3/mapbox-gl-rtl-text.js',
+            null,
+            true
+          );
+        }
+
+        const initializeApiKey = function (env) {
+          const defaultAk = "ENTER YOUR API KEY AND PRESS RETURN";
+          document.getElementById('apiKey').value = '';
+          ak = defaultApiKey;
+          document.getElementById('apiKey').placeholder = ak;
+          if(ak!==defaultAk) {
+            document.getElementById('apiKey').value = ak;
+          }
+        }
+
+        const resetMap = function () {
+          if (map !== undefined) {
+            map.off();
+            map.remove();
+          }
+        }
+
+        const useSelection = function() {
+            resetMap();
+            currentGeocodingUrl = defaultGeocodingUrl;
+            currentMapStyleUrl= defaultMapStyle;
+            initializeApiKey();
+        }
+
+        const initMap = function () {
+          map = L.map('map', {
+          }).setView(mapCenter, mapZoom);
+
+          let vectorLayer = L.maplibreGL({
+            attribution: '&copy; ' + new Date().getFullYear() + ' PTV Group, HERE',
+            interactive: false,
+            maxZoom: 18,
+            style: getMapStyle(),
+            transformRequest: (url, resourceType) => {
+              if (resourceType === 'Tile') {
+                return {
+                  url: url + '?apiKey=' + getApiKey()
+                }
+              }
+            }
+          }).addTo(map);
+          markers = L.featureGroup().addTo(map);
+        }
+
+        const searchAddress = function () {
+            markers.clearLayers();
+            var request = `${getGeocodingUrl()}/locations/by-address?${getAddressParameters()}`;
+
+            fetch(
+                request,
+                applyApiKey()
+            ).then(
+                response => response.json()
+            ).then(({ locations }) => {
+              if (locations) {
+                var bounds = L.latLngBounds();
+                locations.forEach(location => {
+                  let lat_lng = [location.referencePosition.latitude, location.referencePosition.longitude]
+                  let lat_lng_x = [location.referencePosition.latitude + 0.002, location.referencePosition.longitude + 0.002]
+                  const marker = L.marker(lat_lng).addTo(markers);
+                  marker.bindPopup(location.formattedAddress);
+                  bounds.extend(lat_lng)
+                  bounds.extend(lat_lng_x)
+                });
+                map.fitBounds(bounds);
+              };
+            });
+        }
+
+        const getAddressParameters = function () {
+            var country = document.getElementById('countryInput').value;
+            var state = document.getElementById('stateInput').value;
+            var postalCode = document.getElementById('postalCodeInput').value;
+            var locality = document.getElementById('localityInput').value;
+            var street = document.getElementById('streetInput').value;
+            var houseNumber = document.getElementById('houseNumberInput').value;
+
+            var result = `country=${country}`;
+            result = result + `&state=${state}`;
+            result = result + `&postalCode=${postalCode}`;
+            result = result + `&locality=${locality}`;
+            result = result + `&street=${street}`;
+            result = result + `&houseNumber=${houseNumber}`;
+            return result;
+        }
+
+        const onChooseSuggestion = function (event, ui) {
+            if (ui !== null && ui.item !== null) {
+                updateInputs(ui.item.suggestion);
+            }
+        }
+
+        const onFillSuggestions = function (request, response, inputField) {
+            var url = `${getGeocodingUrl()}/suggestions/by-address`;
+            $.ajax({
+                url: url,
+                type: "GET",
+                dataType: "json",
+                headers: { 'ApiKey': getApiKey() },
+                data: {
+                    'country': document.getElementById('countryInput').value,
+                    'state': document.getElementById('stateInput').value,
+                    'postalCode': document.getElementById('postalCodeInput').value,
+                    'locality': document.getElementById('localityInput').value,
+                    'street': document.getElementById('streetInput').value,
+                    'houseNumber': document.getElementById('houseNumberInput').value,
+                    'inputField': inputField
+                },
+                success: function (data) {
+                    response($.map(data.suggestions, function (suggestion) {
+                        return {
+                            label: suggestion.caption,
+                            value: suggestion.caption.split('(', 1)[0].trim(), // TODO ugly trick
+                            suggestion: suggestion
+                        }
+                    }))
+                }
+            });
+        }
+
+        document.getElementById('apiKey').addEventListener("keypress", function(event) {
+          // If the user presses the "Enter" key on the keyboard
+          if (event.key === "Enter") {
+            currApiKey=getApiKey();
+            initMap()
+            map.setView(mapCenter, mapZoom-1)
+            map.setView(mapCenter, mapZoom)
+          }
+        })
+
+        $("#countryInput").autocomplete({ source: (request, response) => onFillSuggestions(request, response, "COUNTRY"), select: onChooseSuggestion });
+        $("#stateInput").autocomplete({ source: (request, response) => onFillSuggestions(request, response, "STATE"), select: onChooseSuggestion });
+        $("#postalCodeInput").autocomplete({ source: (request, response) => onFillSuggestions(request, response, "POSTAL_CODE"), select: onChooseSuggestion });
+        $("#localityInput").autocomplete({ source: (request, response) => onFillSuggestions(request, response, "LOCALITY"), select: onChooseSuggestion });
+        $("#streetInput").autocomplete({ source: (request, response) => onFillSuggestions(request, response, "STREET"), select: onChooseSuggestion });
+        $("#houseNumberInput").autocomplete({ source: (request, response) => onFillSuggestions(request, response, "HOUSE_NUMBER"), select: onChooseSuggestion });
+
+        const updateInputs = function (suggestion) {
+            document.getElementById('countryInput').value = suggestion.country;
+            document.getElementById('stateInput').value = suggestion.state;
+            document.getElementById('postalCodeInput').value = suggestion.postalCode;
+            document.getElementById('localityInput').value = suggestion.locality;
+            document.getElementById('streetInput').value = suggestion.street;
+            document.getElementById('houseNumberInput').value = suggestion.houseNumber;
+        }
+
+        const clearInputs = function () {
+            document.getElementById('stateInput').value = "";
+            document.getElementById('postalCodeInput').value = "";
+            document.getElementById('localityInput').value = "";
+            document.getElementById('streetInput').value = "";
+            document.getElementById('houseNumberInput').value = "";
+        }
+
+        const presetInputs = function () {
+            document.getElementById('countryInput').value = "Germany";
+            document.getElementById('stateInput').value = "Baden-Württemberg";
+            document.getElementById('postalCodeInput').value = "76131";
+            document.getElementById('localityInput').value = "Karlsruhe";
+            document.getElementById('streetInput').value = "Haid und Neu Straße";
+            document.getElementById('houseNumberInput').value = "15";
+        }
+        const applyApiKey = () => ({
+            headers: {
+                "ApiKey": getApiKey()
+            }
+        });
+
+        const getGeocodingUrl = function () {
+            return currentGeocodingUrl;
+        }
+        const getApiKey = function () {
+            return document.getElementById('apiKey').value;
+        }
+        const getMapStyle = function () {
+            return currentMapStyleUrl;
+        }
+
+    </script>
+</body>
+
+</html>
